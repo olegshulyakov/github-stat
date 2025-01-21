@@ -136,6 +136,54 @@ func AddDatabase(id string, fields map[string]string) error {
 	return nil
 }
 
+// AddDatabasePerformance adds performance statistics to a separate hash table in Valkey
+func AddDatabasePerformance(id string, rps, qps int) error {
+	key := fmt.Sprintf("performance:%s", id)
+
+	data := map[string]interface{}{
+		"rps": rps,
+		"qps": qps,
+	}
+
+	_, err := Valkey.HMSet(key, data).Result()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetAllDatabasePerformances retrieves performance statistics for all databases from Valkey
+func GetAllDatabasePerformances() (map[string]map[string]int, error) {
+	keys, err := Valkey.Keys("performance:*").Result()
+	if err != nil {
+		return nil, err
+	}
+
+	performances := make(map[string]map[string]int)
+	for _, key := range keys {
+		id := key[len("performance:"):]
+		data, err := Valkey.HMGet(key, "rps", "qps").Result()
+		if err != nil {
+			return nil, err
+		}
+
+		rps, err := strconv.Atoi(data[0].(string))
+		if err != nil {
+			return nil, err
+		}
+
+		qps, err := strconv.Atoi(data[1].(string))
+		if err != nil {
+			return nil, err
+		}
+
+		performances[id] = map[string]int{"rps": rps, "qps": qps}
+	}
+
+	return performances, nil
+}
+
 // DeleteDatabase deletes a database from Redis with the specified ID.
 //
 // Arguments:

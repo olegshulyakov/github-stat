@@ -5,7 +5,14 @@
     <div class="col-12">
       <form id="formLoad-{{ .id }}" class="database-form mb-2 py-3">
         <input type="hidden" name="id" value="{{ .id }}">
-        <h3>{{ if eq .dbType "mysql" }}MySQL{{ else if eq .dbType "postgres" }}PostgreSQL{{ else if eq .dbType "mongodb" }}MongoDB{{ end }} <span class="text-muted">/ id: {{ .id }}</span></h3>
+        <h3>
+          {{ if eq .dbType "mysql" }}MySQL{{ else if eq .dbType "postgres" }}PostgreSQL{{ else if eq .dbType "mongodb" }}MongoDB{{ end }} 
+          <span class="text-muted">/ id: {{ .id }}</span>
+          <span class="text-muted">/ Performance: 
+            <span class="performance-rps-{{ .id }}">~</span> RPS, 
+            <span class="performance-qps-{{ .id }}">~</span> QPS
+          </span>
+        </h3>
         <div class="form-group mt-3">
           <label for="connectionsRange-{{ .id }}">Parallel connections to the database</label>
           <div class="range-container mb-3 mt-1" style="position: relative; width: 100%;">
