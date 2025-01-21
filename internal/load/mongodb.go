@@ -12,10 +12,12 @@ import (
 
 // MongoDBSwitch1 handles the logic when the first switch on the control panel is on.
 // These queries run in a loop in each connection.
-func MongoDBSwitch1(client *mongo.Client, db string, id int, dbConfig map[string]string) {
+func MongoDBSwitch1(client *mongo.Client, db string, id int, dbConfig map[string]string) int {
+	var queries int
 
 	// Get the list of unique repository ids.
 	ids, err := mongodb.GetUniqueIntegers(client, db, "repositories", "id")
+	queries++
 	if err != nil {
 		log.Printf("MongoDB: Switch 1: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 	} else if len(ids) > 0 {
@@ -26,6 +28,7 @@ func MongoDBSwitch1(client *mongo.Client, db string, id int, dbConfig map[string
 		// Get the repository data.
 		filter := bson.D{{Key: "id", Value: randomRepo}}
 		repo, err := mongodb.FindOne(client, db, "repositories", filter, bson.D{})
+		queries++
 		if err != nil {
 			log.Printf("MongoDB: Switch 1: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 		}
@@ -33,11 +36,13 @@ func MongoDBSwitch1(client *mongo.Client, db string, id int, dbConfig map[string
 		// Upsert or insert the repository data into the test collection.
 		if randomRepo%2 == 0 {
 			_, err = mongodb.UpsertOneDoc(client, db, "repositoriesTest", repo)
+			queries++
 			if err != nil {
 				log.Printf("MongoDB: Switch 1: Upsert One: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 			}
 		} else {
 			_, err = mongodb.InsertOneDoc(client, db, "repositoriesTest", repo)
+			queries++
 			if err != nil && !mongo.IsDuplicateKeyError(err) {
 				log.Printf("MongoDB: Switch 1: Insert One: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 			}
@@ -46,6 +51,7 @@ func MongoDBSwitch1(client *mongo.Client, db string, id int, dbConfig map[string
 		// Delete old documents from the test collection.
 		filter_delete := bson.D{{Key: "id", Value: randomRepo}}
 		err = mongodb.DeleteDocuments(client, db, "repositoriesTest", filter_delete)
+		queries++
 		if err != nil {
 			log.Printf("MongoDB: Switch 1: Delete old documents: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 		}
@@ -53,23 +59,29 @@ func MongoDBSwitch1(client *mongo.Client, db string, id int, dbConfig map[string
 
 	// Select a random document from the pulls collection.
 	_, err = mongodb.SelectRandomDocument(client, db, "pulls")
+	queries++
 	if err != nil {
 		log.Printf("MongoDB: Error: Switch 1: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 	}
+
+	return queries
 }
 
 // MongoDBSwitch2 handles the logic when the second switch on the control panel is on.
 // These queries run in a loop in each connection.
-func MongoDBSwitch2(client *mongo.Client, db string, id int, dbConfig map[string]string) {
+func MongoDBSwitch2(client *mongo.Client, db string, id int, dbConfig map[string]string) int {
+	var queries int
 
 	// Select a random document from the pulls collection.
 	one_document, err := mongodb.SelectRandomDocument(client, db, "pulls")
+	queries++
 	if err != nil {
 		log.Printf("MongoDB: Error: Switch 2: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 	} else if one_document != nil {
 		// Find the repository associated with the pull request.
 		filter := bson.D{{Key: "name", Value: one_document["repo"]}}
 		_, err := mongodb.FindOne(client, db, "repositories", filter, bson.D{})
+		queries++
 		if err != nil {
 			log.Printf("MongoDB: Error: Switch 2: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 		}
@@ -77,11 +89,13 @@ func MongoDBSwitch2(client *mongo.Client, db string, id int, dbConfig map[string
 		// Upsert or insert the pull request data into the test collection.
 		if id%2 == 0 {
 			_, err = mongodb.UpsertOneDoc(client, db, "pullsTest", one_document)
+			queries++
 			if err != nil {
 				log.Printf("MongoDB: Upsert One: Error: Switch 2: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 			}
 		} else {
 			_, err = mongodb.InsertOneDoc(client, db, "pullsTest", one_document)
+			queries++
 			if err != nil && !mongo.IsDuplicateKeyError(err) {
 				log.Printf("MongoDB: Insert One: Error: Switch 2: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 			}
@@ -90,19 +104,24 @@ func MongoDBSwitch2(client *mongo.Client, db string, id int, dbConfig map[string
 		// Delete old documents from the test collection.
 		filter_delete := bson.D{{Key: "id", Value: one_document["id"]}}
 		err = mongodb.DeleteDocuments(client, db, "pullsTest", filter_delete)
+		queries++
 		if err != nil {
 			log.Printf("MongoDB: Delete old documents: Error: Switch 2: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 		}
 	}
+
+	return queries
 }
 
 // MongoDBSwitch3 handles the logic when the third switch on the control panel is on.
 // These queries run in a loop in each connection.
-func MongoDBSwitch3(client *mongo.Client, db string, id int, dbConfig map[string]string) {
+func MongoDBSwitch3(client *mongo.Client, db string, id int, dbConfig map[string]string) int {
+	var queries int
 	filterPulls := bson.D{}
 
 	// Find pull requests with no specific filter.
 	documents, err := mongodb.FindPullRequests(client, db, "pulls", filterPulls, bson.D{}, 100)
+	queries++
 	if err != nil {
 		log.Printf("MongoDB: Switch3: List docs: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 	}
@@ -118,6 +137,7 @@ func MongoDBSwitch3(client *mongo.Client, db string, id int, dbConfig map[string
 
 		// Insert pull request documents into the test collection.
 		_, err = mongodb.InsertManyDocuments(client, db, "pullsTest", interfaceDocs)
+		queries++
 		if err != nil && !mongo.IsDuplicateKeyError(err) {
 			log.Printf("MongoDB: Switch3: Insert: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 		}
@@ -125,6 +145,7 @@ func MongoDBSwitch3(client *mongo.Client, db string, id int, dbConfig map[string
 		// Create filter to delete documents by id.
 		filter_delete := bson.D{{Key: "id", Value: bson.D{{Key: "$in", Value: pulls_ids}}}}
 		err = mongodb.DeleteDocuments(client, db, "pullsTest", filter_delete)
+		queries++
 		if err != nil {
 			log.Printf("MongoDB: Switch3: Delete old documents: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 		}
@@ -132,6 +153,7 @@ func MongoDBSwitch3(client *mongo.Client, db string, id int, dbConfig map[string
 
 	// Find repositories with no specific filter.
 	repos, err := mongodb.FindRepos(client, db, "repositories", filterPulls, bson.D{}, 100)
+	queries++
 	if err != nil {
 		log.Printf("MongoDB: Switch3: List docs: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 	}
@@ -146,6 +168,7 @@ func MongoDBSwitch3(client *mongo.Client, db string, id int, dbConfig map[string
 
 		// Insert repository documents into the test collection.
 		_, err = mongodb.InsertManyDocuments(client, db, "repositoriesTest", reposDocs)
+		queries++
 		if err != nil && !mongo.IsDuplicateKeyError(err) {
 			log.Printf("MongoDB: Switch3: Insert: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 		}
@@ -153,21 +176,25 @@ func MongoDBSwitch3(client *mongo.Client, db string, id int, dbConfig map[string
 		// Create filter to delete documents by id.
 		filter_repos_delete := bson.D{{Key: "id", Value: bson.D{{Key: "$in", Value: repos_ids}}}}
 		err = mongodb.DeleteDocuments(client, db, "repositoriesTest", filter_repos_delete)
+		queries++
 		if err != nil {
 			log.Printf("MongoDB: Switch3: Delete old documents: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
-		} else {
-			log.Printf("MongoDB: Switch3: goroutine: %d: database: %s: Repos not found, probably database is empty, run dataset import", id, dbConfig["id"])
 		}
 	}
+
+	return queries
 }
 
 // MongoDBSwitch4 handles the logic when the fourth switch on the control panel is on.
 // These queries run in a loop in each connection.
-func MongoDBSwitch4(client *mongo.Client, db string, id int, dbConfig map[string]string) {
+func MongoDBSwitch4(client *mongo.Client, db string, id int, dbConfig map[string]string) int {
+	var queries int
+
 	// Find repositories with more than 10 stargazers.
 	filter_repos := bson.D{{Key: "stargazerscount", Value: bson.D{{Key: "$gt", Value: 10}}}}
 	sort_repos := bson.D{{Key: "stargazerscount", Value: -1}}
 	_, err := mongodb.FindRepos(client, db, "repositories", filter_repos, sort_repos, 10)
+	queries++
 	if err != nil {
 		log.Printf("MongoDB: Switch4: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 	}
@@ -178,6 +205,7 @@ func MongoDBSwitch4(client *mongo.Client, db string, id int, dbConfig map[string
 	// Find pull requests created within the last 3 months.
 	filterPulls := bson.D{{Key: "createdat", Value: bson.D{{Key: "$gt", Value: time}}}}
 	documents, err := mongodb.FindDocuments(client, db, "pulls", filterPulls, bson.D{}, 10)
+	queries++
 	if err != nil {
 		log.Printf("MongoDB: Switch4: List docs: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 	}
@@ -185,6 +213,7 @@ func MongoDBSwitch4(client *mongo.Client, db string, id int, dbConfig map[string
 	if len(documents) > 0 {
 		// Insert pull request documents into the test collection.
 		_, err = mongodb.InsertManyDocuments(client, db, "pullsTest", documents)
+		queries++
 		if err != nil && !mongo.IsDuplicateKeyError(err) {
 			log.Printf("MongoDB: Switch4: Insert Many Docs: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 		}
@@ -192,8 +221,11 @@ func MongoDBSwitch4(client *mongo.Client, db string, id int, dbConfig map[string
 		// Delete old documents from the test collection that are older than 3 months.
 		filter_delete := bson.D{{Key: "createdat", Value: bson.D{{Key: "$lt", Value: time}}}}
 		err = mongodb.DeleteDocuments(client, db, "pullsTest", filter_delete)
+		queries++
 		if err != nil {
 			log.Printf("MongoDB: Switch4: Delete old documents: Error: goroutine: %d: database: %s: message: %s", id, dbConfig["id"], err)
 		}
 	}
+
+	return queries
 }

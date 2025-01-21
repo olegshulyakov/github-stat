@@ -22,6 +22,25 @@
 </script>
 
 <script>
+
+    function updatePerformance() {
+        fetch('/performance')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    for (const [dbID, performance] of Object.entries(data.performances)) {
+                    document.querySelector(`.performance-rps-${dbID}`).textContent = performance.rps;
+                    document.querySelector(`.performance-qps-${dbID}`).textContent = performance.qps;
+                    }
+                }
+            })
+        .catch(error => console.error('Error fetching performance data:', error));
+    }
+
+    document.addEventListener("DOMContentLoaded", updatePerformance);
+
+    setInterval(updatePerformance, 2500);
+
     function deleteSchema(id) {
         if (confirm(`Are you sure you want to delete schema for ${id} database? This will delete all data.`)) {
             const form = $(`#formDatabases-${id}`)[0];

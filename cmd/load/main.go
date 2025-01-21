@@ -44,6 +44,10 @@ type StopLoadIDs struct {
 
 var databasesLoadMutex sync.Mutex
 var stopLoadIDsMutex sync.Mutex
+var countersRPS = make(map[string]int)
+var countersQPS = make(map[string]int)
+var muRPS sync.Mutex
+var muQPS sync.Mutex
 
 func main() {
 	// Get the configuration from environment variables or .env file.
@@ -74,6 +78,9 @@ func main() {
 		log.Printf("Load Postgres: %v", databasesLoad.Postgres)
 		go manageAllLoad("postgres")
 	}
+
+	// Start logging the counters
+	startLoggingCounters()
 
 	// Continuously check and update the configuration from the control panel every 10 seconds
 	for {
@@ -339,6 +346,13 @@ func runMySQL(ctx context.Context, routineId int, dbConfig map[string]string) {
 	// Variable to store the time of the last configuration update
 	lastUpdate := time.Now()
 
+	// Local counters for this goroutine
+	localCounterRPS := 0
+	localCounterQPS := 0
+
+	// Variable to store the time of the last counter update
+	lastCounterUpdate := time.Now()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -356,25 +370,39 @@ func runMySQL(ctx context.Context, routineId int, dbConfig map[string]string) {
 				lastUpdate = time.Now()
 			}
 
-			// Use localDBConfig for other operations
+			// Use localDBConfig for other operations and count queries
 			if localDBConfig["switch1"] == "true" {
-
-				load.MySQLSwitch1(db, routineId, localDBConfig)
+				localCounterQPS += load.MySQLSwitch1(db, routineId, localDBConfig)
 			}
 
 			if localDBConfig["switch2"] == "true" {
-
-				load.MySQLSwitch2(db, routineId, localDBConfig)
+				localCounterQPS += load.MySQLSwitch2(db, routineId, localDBConfig)
 			}
 
 			if localDBConfig["switch3"] == "true" {
-
-				load.MySQLSwitch3(db, routineId, localDBConfig)
+				localCounterQPS += load.MySQLSwitch3(db, routineId, localDBConfig)
 			}
 
 			if localDBConfig["switch4"] == "true" {
+				localCounterQPS += load.MySQLSwitch4(db, routineId, localDBConfig)
+			}
 
-				load.MySQLSwitch4(db, routineId, localDBConfig)
+			// Increase local RPS counter
+			localCounterRPS++
+
+			// Update global counters every 2 seconds
+			if time.Since(lastCounterUpdate) > 2*time.Second {
+				muRPS.Lock()
+				countersRPS[dbConfig["id"]] += localCounterRPS
+				muRPS.Unlock()
+
+				muQPS.Lock()
+				countersQPS[dbConfig["id"]] += localCounterQPS
+				muQPS.Unlock()
+
+				localCounterRPS = 0
+				localCounterQPS = 0
+				lastCounterUpdate = time.Now()
 			}
 
 			// Check that sleep is not empty before attempting conversion
@@ -388,6 +416,7 @@ func runMySQL(ctx context.Context, routineId int, dbConfig map[string]string) {
 	}
 }
 
+// runPostgreSQL runs the PostgreSQL database operations for a specific connection
 func runPostgreSQL(ctx context.Context, routineId int, dbConfig map[string]string) {
 	connectionString := dbConfig["connectionString"]
 
@@ -407,6 +436,13 @@ func runPostgreSQL(ctx context.Context, routineId int, dbConfig map[string]strin
 	for k, v := range dbConfig {
 		localDBConfig[k] = v
 	}
+
+	// Local counters for this goroutine
+	localCounterRPS := 0
+	localCounterQPS := 0
+
+	// Variable to store the time of the last counter update
+	lastCounterUpdate := time.Now()
 
 	for {
 		select {
@@ -429,23 +465,41 @@ func runPostgreSQL(ctx context.Context, routineId int, dbConfig map[string]strin
 			// Debug
 			// newConnections, _ := strconv.Atoi(localDBConfig["connections"])
 			// if newConnections > 0 {
-			// 	log.Printf("Postgres: goroutine: %d: id: %s in progress. Switches: %s, %s, %s, %s, Sleep: %s", routineId+1, dbConfig["id"], localDBConfig["switch1"], localDBConfig["switch2"], localDBConfig["switch3"], localDBConfig["switch4"], localDBConfig["sleep"])
+			//  log.Printf("Postgres: goroutine: %d: id: %s in progress. Switches: %s, %s, %s, %s, Sleep: %s", routineId+1, dbConfig["id"], localDBConfig["switch1"], localDBConfig["switch2"], localDBConfig["switch3"], localDBConfig["switch4"], localDBConfig["sleep"])
 			// }
 
 			if localDBConfig["switch1"] == "true" {
-				load.PostgresSwitch1(db, routineId, localDBConfig)
+				localCounterQPS += load.PostgresSwitch1(db, routineId, localDBConfig)
 			}
 
 			if localDBConfig["switch2"] == "true" {
-				load.PostgresSwitch2(db, routineId, localDBConfig)
+				localCounterQPS += load.PostgresSwitch2(db, routineId, localDBConfig)
 			}
 
 			if localDBConfig["switch3"] == "true" {
-				load.PostgresSwitch3(db, routineId, localDBConfig)
+				localCounterQPS += load.PostgresSwitch3(db, routineId, localDBConfig)
 			}
 
 			if localDBConfig["switch4"] == "true" {
-				load.PostgresSwitch4(db, routineId, localDBConfig)
+				localCounterQPS += load.PostgresSwitch4(db, routineId, localDBConfig)
+			}
+
+			// Increase local RPS counter
+			localCounterRPS++
+
+			// Update global counters every 5 seconds
+			if time.Since(lastCounterUpdate) > 2*time.Second {
+				muRPS.Lock()
+				countersRPS[dbConfig["id"]] += localCounterRPS
+				muRPS.Unlock()
+
+				muQPS.Lock()
+				countersQPS[dbConfig["id"]] += localCounterQPS
+				muQPS.Unlock()
+
+				localCounterRPS = 0
+				localCounterQPS = 0
+				lastCounterUpdate = time.Now()
 			}
 
 			sleepDuration, err := strconv.Atoi(localDBConfig["sleep"])
@@ -456,6 +510,7 @@ func runPostgreSQL(ctx context.Context, routineId int, dbConfig map[string]strin
 	}
 }
 
+// runMongoDB runs the MongoDB operations for a specific connection
 func runMongoDB(ctx context.Context, routineId int, dbConfig map[string]string) {
 	connectionString := dbConfig["connectionString"]
 
@@ -480,6 +535,13 @@ func runMongoDB(ctx context.Context, routineId int, dbConfig map[string]string) 
 		localDBConfig[k] = v
 	}
 
+	// Local counters for this goroutine
+	localCounterRPS := 0
+	localCounterQPS := 0
+
+	// Variable to store the time of the last counter update
+	lastCounterUpdate := time.Now()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -497,22 +559,40 @@ func runMongoDB(ctx context.Context, routineId int, dbConfig map[string]string) 
 
 				lastUpdate = time.Now()
 			}
-			// log.Printf("MongoDB: goroutine: %d: id: %s in progress. Switches: %s, %s, %s, %s, Sleep: %s", routineId+1, dbConfig["id"], updatedDBConfig["switch1"], updatedDBConfig["switch2"], updatedDBConfig["switch3"], updatedDBConfig["switch4"], updatedDBConfig["sleep"])
 
+			// Execute database operations and count queries
 			if localDBConfig["switch1"] == "true" {
-				load.MongoDBSwitch1(client, db, routineId, localDBConfig)
+				localCounterQPS += load.MongoDBSwitch1(client, db, routineId, localDBConfig)
 			}
 
 			if localDBConfig["switch2"] == "true" {
-				load.MongoDBSwitch2(client, db, routineId, localDBConfig)
+				localCounterQPS += load.MongoDBSwitch2(client, db, routineId, localDBConfig)
 			}
 
 			if localDBConfig["switch3"] == "true" {
-				load.MongoDBSwitch3(client, db, routineId, localDBConfig)
+				localCounterQPS += load.MongoDBSwitch3(client, db, routineId, localDBConfig)
 			}
 
 			if localDBConfig["switch4"] == "true" {
-				load.MongoDBSwitch4(client, db, routineId, localDBConfig)
+				localCounterQPS += load.MongoDBSwitch4(client, db, routineId, localDBConfig)
+			}
+
+			// Increase local RPS counter
+			localCounterRPS++
+
+			// Update global counters every 2 seconds
+			if time.Since(lastCounterUpdate) > 2*time.Second {
+				muRPS.Lock()
+				countersRPS[dbConfig["id"]] += localCounterRPS
+				muRPS.Unlock()
+
+				muQPS.Lock()
+				countersQPS[dbConfig["id"]] += localCounterQPS
+				muQPS.Unlock()
+
+				localCounterRPS = 0
+				localCounterQPS = 0
+				lastCounterUpdate = time.Now()
 			}
 
 			sleepDuration, err := strconv.Atoi(localDBConfig["sleep"])
@@ -705,41 +785,43 @@ func checkConnection(db map[string]string) string {
 		result = mongodb.CheckMongoDB(connectionString)
 	}
 
-	// updateConnectionStatus(dbType, db["id"], result)
-
 	return result
 }
 
-// // updateConnectionStatus updates the connection status of a specific database.
-// func updateConnectionStatus(dbType, id, status string) {
-// 	var databasesForProcess []map[string]string
+// startLoggingCounters starts a goroutine that logs counters every 5 seconds
+func startLoggingCounters() {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		defer cancel()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+				logAllCounters()
+			}
+		}
+	}()
+}
 
-// 	// Lock the mutex only for the time needed to copy the reference to the data
-// 	databasesLoadMutex.Lock()
-// 	switch dbType {
-// 	case "mysql":
-// 		databasesForProcess = databasesLoad.MySQL
-// 	case "postgres":
-// 		databasesForProcess = databasesLoad.Postgres
-// 	case "mongodb":
-// 		databasesForProcess = databasesLoad.MongoDB
-// 	}
-// 	databasesLoadMutex.Unlock()
+// logAllCounters logs the RPS and QPS for each database and resets the counters
+func logAllCounters() {
+	muRPS.Lock()
+	defer muRPS.Unlock()
+	muQPS.Lock()
+	defer muQPS.Unlock()
+	for db, count := range countersRPS {
+		rps := count / 2
+		qps := countersQPS[db] / 2
+		log.Printf("Database: %s, iterations per second (RPS): %d, queries per second (QPS): %d", db, rps, qps)
 
-// 	// Update the connection status outside of the mutex lock
-// 	for i, db := range databasesForProcess {
-// 		if db["id"] == id {
-// 			databasesLoadMutex.Lock()
-// 			switch dbType {
-// 			case "mysql":
-// 				databasesLoad.MySQL[i]["connectionStatus"] = status
-// 			case "postgres":
-// 				databasesLoad.Postgres[i]["connectionStatus"] = status
-// 			case "mongodb":
-// 				databasesLoad.MongoDB[i]["connectionStatus"] = status
-// 			}
-// 			databasesLoadMutex.Unlock()
-// 			break
-// 		}
-// 	}
-// }
+		// Save RPS and QPS to Valkey in a separate hash table
+		err := valkey.AddDatabasePerformance(db, rps, qps)
+		if err != nil {
+			log.Printf("Error saving to Valkey: %s", err)
+		}
+
+		countersRPS[db] = 0 // Reset RPS counter after logging
+		countersQPS[db] = 0 // Reset QPS counter after logging
+	}
+}

@@ -55,6 +55,7 @@ func handleRequest() {
 	http.HandleFunc("/delete_db", deleteDatabase)
 	http.HandleFunc("/load_db", loadDatabase)
 	http.HandleFunc("/manage-dataset/", manageDataset)
+	http.HandleFunc("/performance/", getPerformance)
 
 	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
 
@@ -66,6 +67,23 @@ func handleRequest() {
 	fmt.Printf("\nYou can open the control panel in your browser at http://localhost:%s\n\n", port)
 	http.ListenAndServe(":"+port, nil)
 
+}
+
+func getPerformance(w http.ResponseWriter, r *http.Request) {
+	performances, err := valkey.GetAllDatabasePerformances()
+	if err != nil {
+		log.Printf("Error: Retrieving performance data: %v", err)
+		http.Error(w, "Error retrieving performance data", http.StatusInternalServerError)
+		return
+	}
+
+	data := map[string]interface{}{
+		"status":       "success",
+		"performances": performances,
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(data)
 }
 
 func manageDataset(w http.ResponseWriter, r *http.Request) {
