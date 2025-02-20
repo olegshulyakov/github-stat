@@ -1,4 +1,8 @@
 version: '3.8'
+
+networks:
+  demo_network:
+
 services:
   valkey:
     image: valkey/valkey:8
@@ -13,6 +17,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - demo_network
 
   demo_app_dataset:
     image: dbazhenov/demo_app_dataset:0.2.0
@@ -29,6 +35,8 @@ services:
       - GITHUB_TOKEN= # required for github load type
       - DELAY_MINUTES=10
       - DEBUG=false
+    networks:
+      - demo_network
 
   demo_app_web:
     image: dbazhenov/demo_app_web:0.2.0
@@ -41,6 +49,8 @@ services:
       - CONTROL_PANEL_PORT=3000
     ports:
       - "3000:3000"
+    networks:
+      - demo_network
 
   demo_app_load:
     image: dbazhenov/demo_app_load:0.2.0
@@ -53,7 +63,8 @@ services:
       - LOAD_MYSQL=true
       - LOAD_POSTGRES=true
       - LOAD_MONGODB=true
-
+    networks:
+      - demo_network
 
   postgres:
     image: "percona/percona-distribution-postgresql:17-multi"
@@ -71,21 +82,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-
-  mongodb:
-    image: "percona/percona-server-mongodb:8.0-multi"
-    volumes:
-      - mongo-data:/data/db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: databaseAdmin
-      MONGO_INITDB_ROOT_PASSWORD: password
-    ports:
-      - "27017:27017"
-    healthcheck:
-      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand(\"ping\")' --quiet"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+    networks:
+      - demo_network
 
   mysql:
     image: "percona/percona-server:8.4.3-3.1-multi"
@@ -103,28 +101,46 @@ services:
     command: >
       --performance-schema --innodb_monitor_enable=all
       --slow_query_log --slow_query_log_file=/mysql/slowlogs/slow.log --long_query_time=0
+    networks:
+      - demo_network
+
+  mongodb:
+    image: "percona/percona-server-mongodb:8.0-multi"
+    volumes:
+      - mongo-data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: databaseAdmin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand(\"ping\")' --quiet"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - demo_network
 
   pmm-server:
-    image: percona/pmm-server:2
+    image: percona/pmm-server:3
     platform: "linux/amd64"
     container_name: pmm-server
     restart: always
     ports:
       - 8080:80
-      - 443:443
+      - "443:8443"
     volumes:
       - pmm-data:/srv
-    environment:
-      - DISABLE_TELEMETRY=0
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]
+      test: ["CMD-SHELL", "curl -k -f -L https://pmm-server:8443 > /dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - demo_network
 
   pmm-client:
-    image: percona/pmm-client:2
-    platform: "linux/amd64"
+    image: percona/pmm-client:3
     container_name: pmm-client
     depends_on:
       pmm-server:
@@ -136,7 +152,7 @@ services:
       mongodb:
         condition: service_healthy
     environment:
-      PMM_AGENT_SERVER_ADDRESS: pmm-server
+      PMM_AGENT_SERVER_ADDRESS: pmm-server:8443
       PMM_AGENT_SERVER_USERNAME: admin
       PMM_AGENT_SERVER_PASSWORD: admin
       PMM_AGENT_SERVER_INSECURE_TLS: 1
@@ -148,10 +164,13 @@ services:
         pmm-admin add mysql --query-source=perfschema --username=root --password=password --host=mysql --port=3306 &&
         pmm-admin add postgresql --username=postgres --password=password --host=postgres --port=5432 --query-source=pgstatmonitor &&
         pmm-admin add mongodb --username=databaseAdmin --password=password --host=mongodb --port=27017 --query-source=profiler
+    networks:
+      - demo_network
 
 volumes:
   valkey-data:
-  pmm-data:
   mongo-data:
   pg-data:
   mysql-data:
+  pmm-data:
+  

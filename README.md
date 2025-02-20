@@ -1,6 +1,18 @@
-# Demo application for MySQL, PostgreSQL, and MongoDB databases, with monitoring and deployment in Kubernetes.
+# Application for load simulation of MySQL, Postgres, MongoDB databases.
 
-This demo application is designed to showcase the usage of **MySQL**, **PostgreSQL**, and **MongoDB** databases, along with database monitoring and deployment in **Kubernetes** environments. It provides an opportunity to explore how these databases can be tested and monitored, using Go applications and [Percona Monitoring and Management](https://docs.percona.com/percona-monitoring-and-management/index.html) (PMM) tools.
+Application for **MySQL**, **PostgreSQL**, and **MongoDB** database load simulation with user-friendly web interface in browser and detailed database monitoring. 
+
+* A user-friendly web interface is used for load management. You can control the number of concurrent connections and the complexity of queries. 
+
+* The algorithms, SQL, and NoSQL database queries are the same for all databases, allowing them to be compared in similar usage scenarios.
+
+* The load simulation uses a dataset with GitHub data about repositories and Pull Requests in JSON format. The data can be uploaded from your organization's GitHub via API or used as a test dataset in CSV format. 
+
+* The application lets you connect to databases in any environment or cloud. 
+
+
+This demo application showcases the usage of **MySQL**, **PostgreSQL**, and **MongoDB** databases, along with database monitoring and deployment in **Kubernetes** environments. It provides an opportunity to explore how these databases can be tested and monitored using Go applications and [Percona Monitoring and Management](https://docs.percona.com/percona-monitoring-and-management/index.html) (PMM) tools.
+
 
 ![Demo Control Panel](./assets/readme-contol-panel.png)
 
@@ -8,33 +20,24 @@ This demo application is designed to showcase the usage of **MySQL**, **PostgreS
 
 The application consists of three main components:
 
-1. **Control Panel**: A web-based application used for managing database load and configurations.
+1. **Control Panel**: A web-based application for managing database load and configurations.
 
-2. **Dataset Loader**: A Go application that fetches data from GitHub via API and loads it into the databases for testing and load simulation.
+2. **Dataset Loader**: A Go application fetches data from GitHub via API and loads it into the databases for testing and load simulation.
 
 3. **Load Generator**: A Go application that generates SQL and NoSQL queries based on control panel settings.
-
-## Usage
-
-The application connects to and generates load on MySQL, PostgreSQL, and MongoDB databases in the cloud or Kubernetes. You can start the databases with:
-
-1. **[Docker Compose](https://docs.docker.com/compose/)**: Configuration is available in the repository.
-2. **[Percona Everest](https://docs.percona.com/everest/index.html) or [Percona Operators](https://docs.percona.com/percona-operators) in Kubernetes**: If the databases are not externally accessible, run the application in the same cluster.
-3. **Custom Methods**: Connection parameters can be set in environment variables or through the Settings tab of the Control Panel.
 
 ### Usage Scenario:
 
 1. Start the **Control Panel** in your browser (e.g., iPad).
 2. Open **PMM** in the browser (e.g., screen or laptop).
-3. Install **Percona Everest**, run it in the browser, and create MySQL, PostgreSQL, and MongoDB databases.
-4. Connect the databases in the **Control Panel Settings**.
+4. Connect the databases in the **Control Panel Settings**. If you don't have databases, run them using Docker, DBaaS, or in a Kubernetes cluster using Percona Operators or Percona Everest.
 5. Adjust the load on the **Control Panel** and monitor the changes in PMM.
 
-## How It Works Technically
+The application connects to and generates load on MySQL, PostgreSQL, and MongoDB databases in the cloud or Kubernetes. You can start the databases with:
 
-1. **Control Panel**: A web application that stores settings in the [Valkey](https://valkey.io/) database when adjustments are made.
-2. **Dataset Loader**: A continuously running script that checks settings in Valkey every `5` seconds, connects to the databases, and loads the data.
-3. **Load Generator**: Another continuously running script that works on one or all databases. Every 5 seconds, it checks the load settings in Valkey and generates SQL and NoSQL queries accordingly. These queries are defined in `internal/load/load.go`.
+1. Docker and **[Docker Compose](https://docs.docker.com/compose/)**: Configuration is available in the repository.
+2. **[Percona Everest](https://docs.percona.com/everest/index.html) or [Percona Operators](https://docs.percona.com/percona-operators) in Kubernetes**: If the databases are not externally accessible, run the application in the same cluster.
+3. Any other installation method or connection to an existing database. 
 
 ## Running locally with Docker Compose
 
@@ -62,7 +65,7 @@ The application connects to and generates load on MySQL, PostgreSQL, and MongoDB
 
    > **Note:** We recommend looking at the docker-compose files so you can know which containers are running and with what settings. You can always change the settings.
 
-   > **Note:** PMM server will be available at `localhost:8080`, access `admin` / `admin` . At the first startup, it will offer to change the password, skip it or set the same password (admin). 
+   > **Note:** PMM server will be available at `https://localhost`, access `admin` / `admin` . At the first startup, it will offer to change the password, skip it or set the same password (admin). 
 
 3. Launch the Control Panel at `localhost:3000` in your browser.
 
@@ -88,7 +91,7 @@ The application connects to and generates load on MySQL, PostgreSQL, and MongoDB
 
 6. Turn on the `Enable Load` setting option and click Update connection to make the database appear on the `Load Generator Control Panel` tab. 
 
-7. Open PMM to see the connected databases and load. `localhost:8080` (admin/admin). We recommend opening the Databases Overview dashboard in the Experimental section.
+7. Open PMM 3 to see the connected databases and load. `https://localhost` (admin/admin). We recommend opening the Databases Overview dashboard in the Experimental section.
 
    ![PMM Databases Overview](./assets/pmm-overview.jpg)
 
@@ -296,6 +299,12 @@ The first time you connect to MySQL and Postgres, you will need to create a sche
 6. Control the load in the control panel. Change queries using the switches. Track the result on PMM dashboards. Scale or change database parameters with Percona Everest.
 
 Have fun experimenting.
+
+## How It Works Technically
+
+1. **Control Panel**: This is a web service that can be opened in a browser. Through the interface, you can add connections to databases. You can load the dataset by clicking the button. Enable and manage the load. The service is developed in Go and stores settings in the [Valkey](https://valkey.io/) database. Other services read settings from Valkey.
+2. **Dataset Loader**: The service developed in Go can load a dataset via GitHub API or from a CSV file. The service stores the dataset in memory, and any time you click the Import Dataset button for some database, it will load it into the database with Insert queries.
+3. **Load Generator**: The service opens the number of concurrent connections to the database in separate go routines (threads) specified on the control panel. An infinite loop is started in each connection, and SQL and NoSQL queries are executed. The queries depend on the switches on the control panel. Every 2 seconds, it checks the load settings in Valkey and generates SQL and NoSQL queries accordingly. These queries are defined in `internal/load/load.go`. We also call the Sleep function in each iteration of the loop to simulate the delay for the business logic. Sleep in milliseconds is set in the control panel for each database.
 
 ## Development Environment
 
